@@ -79,14 +79,14 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
 
   if (!liveData[user.id]) liveData[user.id] = [];
 
-  // Bắt đầu stream
+  // --- Bắt đầu stream
   if (!wasStreaming && isStreaming) {
     liveData[user.id].push({ start: now });
     await sendChannel(process.env.LOG_CHANNEL_ID, `🟢 **Bắt đầu stream:** <@${user.id}> lúc ${vnTime(now)}`);
     saveData();
   }
 
-  // Kết thúc stream
+  // --- Kết thúc stream (bao gồm stop stream hoặc rời voice)
   if ((wasStreaming && !isStreaming) || (oldChannel && !newChannel)) {
     const sessions = liveData[user.id];
     if (sessions.length) {
@@ -110,12 +110,42 @@ client.on('messageCreate', async msg => {
   const args = msg.content.trim().split(/\s+/);
   const command = args[0].toLowerCase();
 
+  // --- Lệnh !time nâng cấp ---
   if (command === '!time') {
-    const user = msg.mentions.users.first() || msg.author;
-    const totalSec = totalTime(todaySessions(liveData[user.id] || []));
-    msg.reply(`📊 **Thống kê hôm nay của ${user}**\n⏱ Tổng thời gian stream: ${formatDuration(totalSec)}`);
+    let target;
+
+    // 1️⃣ Nếu có mention
+    if (msg.mentions.users.size > 0) {
+      target = msg.mentions.users.first();
+    } 
+    // 2️⃣ Nếu có ID hoặc username argument
+    else if (args[1]) {
+      const arg = args[1];
+
+      // Thử fetch bằng ID
+      try {
+        const memberById = await msg.guild.members.fetch(arg);
+        if (memberById) target = memberById.user;
+      } catch {}
+
+      // Nếu chưa tìm thấy, thử username
+      if (!target) {
+        const memberByName = msg.guild.members.cache.find(
+          m => m.user.username.toLowerCase() === arg.toLowerCase()
+        );
+        if (memberByName) target = memberByName.user;
+      }
+    }
+
+    // 3️⃣ Nếu không tìm thấy ai, mặc định người gửi
+    if (!target) target = msg.author;
+
+    // Tính tổng thời gian live hôm nay
+    const totalSec = totalTime(todaySessions(liveData[target.id] || []));
+    msg.reply(`📊 **Thống kê hôm nay của ${target}**\n⏱ Tổng thời gian stream: ${formatDuration(totalSec)}`);
   }
 
+  // --- Lệnh !top ---
   if (command === '!top') {
     const lb = genLeaderboard(liveData);
     msg.reply(formatLeaderboard(lb, "Xếp hạng Stream hôm nay"));
