@@ -3,6 +3,7 @@ const { Client, GatewayIntentBits } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 const cron = require('node-cron');
+const express = require('express');
 
 // === FILE DỮ LIỆU ===
 const DATA_FILE = path.join(__dirname, 'live_data.json');
@@ -65,7 +66,7 @@ client.once('ready', () => {
   sendChannel(process.env.LOG_CHANNEL_ID, "✅ Bot đã khởi động và sẵn sàng!");
 });
 
-// === TRACK STREAM + VOICE (gộp) ===
+// === TRACK STREAM + VOICE ===
 client.on('voiceStateUpdate', async (oldState, newState) => {
   const user = await client.users.fetch(newState.id);
   if (!user || user.bot) return;
@@ -78,14 +79,14 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
 
   if (!liveData[user.id]) liveData[user.id] = [];
 
-  // --- Bắt đầu stream
+  // Bắt đầu stream
   if (!wasStreaming && isStreaming) {
     liveData[user.id].push({ start: now });
     await sendChannel(process.env.LOG_CHANNEL_ID, `🟢 **Bắt đầu stream:** <@${user.id}> lúc ${vnTime(now)}`);
     saveData();
   }
 
-  // --- Kết thúc stream (bao gồm stop stream hoặc rời voice)
+  // Kết thúc stream
   if ((wasStreaming && !isStreaming) || (oldChannel && !newChannel)) {
     const sessions = liveData[user.id];
     if (sessions.length) {
@@ -109,19 +110,23 @@ client.on('messageCreate', async msg => {
   const args = msg.content.trim().split(/\s+/);
   const command = args[0].toLowerCase();
 
-  // !time [user]
   if (command === '!time') {
     const user = msg.mentions.users.first() || msg.author;
     const totalSec = totalTime(todaySessions(liveData[user.id] || []));
     msg.reply(`📊 **Thống kê hôm nay của ${user}**\n⏱ Tổng thời gian stream: ${formatDuration(totalSec)}`);
   }
 
-  // !top
   if (command === '!top') {
     const lb = genLeaderboard(liveData);
     msg.reply(formatLeaderboard(lb, "Xếp hạng Stream hôm nay"));
   }
 });
 
-// === LOGIN ===
+// === WEB SERVER NHỎ GỌN CHO RENDER ===
+const app = express();
+app.get('/', (req, res) => res.send('🤖 Bot Discord đang chạy!'));
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`🌐 Web server listening on port ${PORT}`));
+
+// === LOGIN BOT DISCORD ===
 client.login(process.env.DISCORD_TOKEN);
