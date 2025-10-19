@@ -6,13 +6,12 @@ const cron = require('node-cron');
 
 // === FILE DỮ LIỆU ===
 const DATA_FILE = path.join(__dirname, 'live_data.json');
-const MONTH_FILE = path.join(__dirname, 'leaderboard_month.json');
-const YEAR_FILE = path.join(__dirname, 'leaderboard_year.json');
 
 // === LOAD & SAVE DATA ===
 const loadSafe = file => {
   if (!fs.existsSync(file)) fs.writeFileSync(file, '{}');
-  try { return JSON.parse(fs.readFileSync(file)); } catch { fs.writeFileSync(file, '{}'); return {}; }
+  try { return JSON.parse(fs.readFileSync(file)); } 
+  catch { fs.writeFileSync(file, '{}'); return {}; }
 };
 
 let liveData = loadSafe(DATA_FILE);
@@ -66,33 +65,38 @@ client.once('ready', () => {
   sendChannel(process.env.LOG_CHANNEL_ID, "✅ Bot đã khởi động và sẵn sàng!");
 });
 
-// === TRACK STREAM ===
+// === TRACK STREAM + VOICE (gộp) ===
 client.on('voiceStateUpdate', async (oldState, newState) => {
   const user = await client.users.fetch(newState.id);
   if (!user || user.bot) return;
 
+  const oldChannel = oldState.channelId;
+  const newChannel = newState.channelId;
   const wasStreaming = oldState.streaming ?? false;
   const isStreaming = newState.streaming ?? false;
   const now = Date.now();
 
-  // Bắt đầu stream
+  if (!liveData[user.id]) liveData[user.id] = [];
+
+  // --- Bắt đầu stream
   if (!wasStreaming && isStreaming) {
-    if (!liveData[user.id]) liveData[user.id] = [];
     liveData[user.id].push({ start: now });
     await sendChannel(process.env.LOG_CHANNEL_ID, `🟢 **Bắt đầu stream:** <@${user.id}> lúc ${vnTime(now)}`);
     saveData();
   }
 
-  // Kết thúc stream
-  if (wasStreaming && !isStreaming) {
-    const sessions = liveData[user.id] || [];
+  // --- Kết thúc stream (bao gồm stop stream hoặc rời voice)
+  if ((wasStreaming && !isStreaming) || (oldChannel && !newChannel)) {
+    const sessions = liveData[user.id];
     if (sessions.length) {
-      const last = sessions[sessions.length-1];
+      const last = sessions[sessions.length - 1];
       if (!last.end) last.end = now;
-      const duration = Math.floor((last.end - last.start)/1000);
+      const duration = Math.floor((last.end - last.start) / 1000);
       const total = totalTime(todaySessions(sessions));
+
       await sendChannel(process.env.LOG_CHANNEL_ID, 
         `🔴 <@${user.id}> kết thúc stream\n⏱ Thời gian: ${formatDuration(duration)}\n🕒 Tổng hôm nay: ${formatDuration(total)}\n🕛 Thời điểm: ${vnTime(now)}`);
+
       saveData();
     }
   }
